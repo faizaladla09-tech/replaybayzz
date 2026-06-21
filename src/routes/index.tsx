@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useReplays, toEmbedUrl, type Replay } from "@/lib/replays-store";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { Play, Lock, Sparkles } from "lucide-react";
+import { Play, Lock, Sparkles, Search, X } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -26,6 +26,13 @@ function Index() {
   const [active, setActive] = useState<Replay | null>(null);
   const [tokenInput, setTokenInput] = useState("");
   const [unlocked, setUnlocked] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((r) => r.name.toLowerCase().includes(q));
+  }, [items, query]);
 
   const openReplay = (r: Replay) => {
     setActive(r);
@@ -86,13 +93,37 @@ function Index() {
       </section>
 
       <main className="mx-auto max-w-6xl px-4 sm:px-6 pb-20">
+        <div className="mb-6 relative max-w-md mx-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Cari nama replay..."
+            className="pl-9 pr-9 bg-card border-border h-11"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 grid place-items-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary"
+              aria-label="Hapus pencarian"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
         {!ready ? null : items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted-foreground">
             Belum ada replay. Tambahkan dari halaman admin.
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted-foreground">
+            Tidak ada replay yang cocok dengan "{query}".
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {items.map((r) => (
+            {filtered.map((r) => (
               <article
                 key={r.id}
                 className="group rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/60 transition shadow-lg shadow-black/20"

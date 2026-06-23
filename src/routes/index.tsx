@@ -128,24 +128,7 @@ function Index() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {filtered.map((r) => (
-              <article
-                key={r.id}
-                className="group rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/60 transition shadow-lg shadow-black/20"
-              >
-                <div className="relative aspect-video bg-gradient-to-br from-primary/30 via-card to-accent/20 grid place-items-center overflow-hidden">
-                  <Lock className="h-10 w-10 text-foreground/40 group-hover:scale-110 transition" />
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,oklch(0.72_0.2_320/0.25),transparent_60%)]" />
-                </div>
-                <div className="p-5">
-                  <h3 className="font-bold text-lg leading-snug line-clamp-2">{r.name}</h3>
-                  <Button
-                    onClick={() => openReplay(r)}
-                    className="mt-4 w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-                  >
-                    <Play className="h-4 w-4 mr-2" /> Tonton Replay
-                  </Button>
-                </div>
-              </article>
+              <ReplayCard key={r.id} replay={r} onOpen={() => openReplay(r)} />
             ))}
           </div>
         )}

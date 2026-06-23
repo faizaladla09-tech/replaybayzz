@@ -69,7 +69,7 @@ function LoginForm() {
           </div>
           <h1 className="mt-3 text-xl font-bold">Bayzz Admin</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Default: admin / bayzz123
+            Masuk untuk mengelola katalog replay
           </p>
         </div>
         <div className="space-y-2">

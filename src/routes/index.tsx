@@ -3,12 +3,15 @@ import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useReplays, toVideoId, type Replay } from "@/lib/replays-store";
 import { YouTubePlayer } from "@/components/YouTubePlayer";
+import { ReplayFeedback } from "@/components/ReplayFeedback";
+import { useRatings } from "@/lib/feedback-store";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { Play, Lock, Sparkles, Search, X } from "lucide-react";
+import { Star } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -125,24 +128,7 @@ function Index() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {filtered.map((r) => (
-              <article
-                key={r.id}
-                className="group rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/60 transition shadow-lg shadow-black/20"
-              >
-                <div className="relative aspect-video bg-gradient-to-br from-primary/30 via-card to-accent/20 grid place-items-center overflow-hidden">
-                  <Lock className="h-10 w-10 text-foreground/40 group-hover:scale-110 transition" />
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,oklch(0.72_0.2_320/0.25),transparent_60%)]" />
-                </div>
-                <div className="p-5">
-                  <h3 className="font-bold text-lg leading-snug line-clamp-2">{r.name}</h3>
-                  <Button
-                    onClick={() => openReplay(r)}
-                    className="mt-4 w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-                  >
-                    <Play className="h-4 w-4 mr-2" /> Tonton Replay
-                  </Button>
-                </div>
-              </article>
+              <ReplayCard key={r.id} replay={r} onOpen={() => openReplay(r)} />
             ))}
           </div>
         )}
@@ -153,7 +139,7 @@ function Index() {
       </footer>
 
       <Dialog open={!!active} onOpenChange={closeModal}>
-        <DialogContent className="bg-card border-border max-w-3xl">
+          <DialogContent className="bg-card border-border max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl">{active?.name}</DialogTitle>
             <DialogDescription>
@@ -162,7 +148,10 @@ function Index() {
           </DialogHeader>
 
           {unlocked && active ? (
-            <YouTubePlayer videoId={toVideoId(active.youtubeUrl)} title={active.name} />
+            <>
+              <YouTubePlayer videoId={toVideoId(active.youtubeUrl)} title={active.name} />
+              <ReplayFeedback replayId={active.id} />
+            </>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <Input
@@ -183,5 +172,36 @@ function Index() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ReplayCard({ replay, onOpen }: { replay: Replay; onOpen: () => void }) {
+  const { avg, count } = useRatings(replay.id);
+  return (
+    <article className="group rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/60 transition shadow-lg shadow-black/20">
+      <div className="relative aspect-video bg-gradient-to-br from-primary/30 via-card to-accent/20 grid place-items-center overflow-hidden">
+        <Lock className="h-10 w-10 text-foreground/40 group-hover:scale-110 transition" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,oklch(0.72_0.2_320/0.25),transparent_60%)]" />
+      </div>
+      <div className="p-5">
+        <h3 className="font-bold text-lg leading-snug line-clamp-2">{replay.name}</h3>
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Star className={`h-3.5 w-3.5 ${count ? "fill-yellow-400 text-yellow-400" : ""}`} />
+          {count ? (
+            <span>
+              <span className="text-foreground font-semibold">{avg.toFixed(1)}</span> · {count} penilaian
+            </span>
+          ) : (
+            <span>Belum ada penilaian</span>
+          )}
+        </div>
+        <Button
+          onClick={onOpen}
+          className="mt-4 w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+        >
+          <Play className="h-4 w-4 mr-2" /> Tonton Replay
+        </Button>
+      </div>
+    </article>
   );
 }

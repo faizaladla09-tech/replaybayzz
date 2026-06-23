@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useReplays, toEmbedUrl, type Replay } from "@/lib/replays-store";
+import { useReplays, toVideoId, type Replay } from "@/lib/replays-store";
+import { YouTubePlayer } from "@/components/YouTubePlayer";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,7 +73,7 @@ function Index() {
           </div>
           <Link
             to="/admin-bayzz"
-            className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition"
+            className="inline-flex items-center rounded-md border border-border bg-secondary px-3 py-1.5 text-xs sm:text-sm font-medium text-foreground hover:bg-secondary/70 transition"
           >
             Admin
           </Link>
@@ -161,15 +162,7 @@ function Index() {
           </DialogHeader>
 
           {unlocked && active ? (
-            <div className="aspect-video w-full overflow-hidden rounded-xl bg-black">
-              <iframe
-                src={toEmbedUrl(active.youtubeUrl)}
-                title={active.name}
-                className="h-full w-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
+            <YouTubePlayer videoId={toVideoId(active.youtubeUrl)} title={active.name} />
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <Input

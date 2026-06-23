@@ -3,12 +3,15 @@ import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useReplays, toVideoId, type Replay } from "@/lib/replays-store";
 import { YouTubePlayer } from "@/components/YouTubePlayer";
+import { ReplayFeedback } from "@/components/ReplayFeedback";
+import { useRatings } from "@/lib/feedback-store";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { Play, Lock, Sparkles, Search, X } from "lucide-react";
+import { Star } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -153,7 +156,7 @@ function Index() {
       </footer>
 
       <Dialog open={!!active} onOpenChange={closeModal}>
-        <DialogContent className="bg-card border-border max-w-3xl">
+          <DialogContent className="bg-card border-border max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl">{active?.name}</DialogTitle>
             <DialogDescription>
@@ -162,7 +165,10 @@ function Index() {
           </DialogHeader>
 
           {unlocked && active ? (
-            <YouTubePlayer videoId={toVideoId(active.youtubeUrl)} title={active.name} />
+            <>
+              <YouTubePlayer videoId={toVideoId(active.youtubeUrl)} title={active.name} />
+              <ReplayFeedback replayId={active.id} />
+            </>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <Input

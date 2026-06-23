@@ -174,3 +174,34 @@ function Index() {
     </div>
   );
 }
+
+function ReplayCard({ replay, onOpen }: { replay: Replay; onOpen: () => void }) {
+  const { avg, count } = useRatings(replay.id);
+  return (
+    <article className="group rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/60 transition shadow-lg shadow-black/20">
+      <div className="relative aspect-video bg-gradient-to-br from-primary/30 via-card to-accent/20 grid place-items-center overflow-hidden">
+        <Lock className="h-10 w-10 text-foreground/40 group-hover:scale-110 transition" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,oklch(0.72_0.2_320/0.25),transparent_60%)]" />
+      </div>
+      <div className="p-5">
+        <h3 className="font-bold text-lg leading-snug line-clamp-2">{replay.name}</h3>
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Star className={`h-3.5 w-3.5 ${count ? "fill-yellow-400 text-yellow-400" : ""}`} />
+          {count ? (
+            <span>
+              <span className="text-foreground font-semibold">{avg.toFixed(1)}</span> · {count} penilaian
+            </span>
+          ) : (
+            <span>Belum ada penilaian</span>
+          )}
+        </div>
+        <Button
+          onClick={onOpen}
+          className="mt-4 w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+        >
+          <Play className="h-4 w-4 mr-2" /> Tonton Replay
+        </Button>
+      </div>
+    </article>
+  );
+}

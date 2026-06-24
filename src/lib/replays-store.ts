@@ -1,4 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
+import {
+  listReplaysPublic,
+  listReplaysAdmin,
+  addReplayFn,
+  updateReplayFn,
+  removeReplayFn,
+  unlockReplay,
+  getAdminSession,
+  adminLoginFn,
+  adminLogoutFn,
+} from "./bayzz.functions";
 
 export type Replay = {
   id: string;
@@ -6,75 +17,84 @@ export type Replay = {
   youtubeUrl: string;
   token: string;
 };
+export type PublicReplay = { id: string; name: string };
 
-const KEY = "bayzz_replays_v1";
-const ADMIN_KEY = "bayzz_admin_auth_v1";
+// Public listing (no tokens, no URLs)
+export function usePublicReplays() {
+  const [items, setItems] = useState<PublicReplay[]>([]);
+  const [ready, setReady] = useState(false);
 
-const SEED: Replay[] = [
-  {
-    id: "demo-1",
-    name: "Bayzz Opening Show",
-    youtubeUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ",
-    token: "BAYZZ-001",
-  },
-];
-
-function read(): Replay[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) {
-      localStorage.setItem(KEY, JSON.stringify(SEED));
-      return SEED;
+  const refresh = useCallback(async () => {
+    try {
+      const data = await listReplaysPublic();
+      setItems(data);
+    } finally {
+      setReady(true);
     }
-    return JSON.parse(raw) as Replay[];
-  } catch {
-    return [];
-  }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const h = () => void refresh();
+    window.addEventListener("bayzz:replays-changed", h);
+    return () => window.removeEventListener("bayzz:replays-changed", h);
+  }, [refresh]);
+
+  return { items, ready, refresh };
 }
 
-function write(items: Replay[]) {
-  localStorage.setItem(KEY, JSON.stringify(items));
-  window.dispatchEvent(new Event("bayzz:replays-changed"));
-}
-
-export function useReplays() {
+// Admin CRUD — all server-validated
+export function useAdminReplays() {
   const [items, setItems] = useState<Replay[]>([]);
   const [ready, setReady] = useState(false);
 
+  const refresh = useCallback(async () => {
+    try {
+      const data = await listReplaysAdmin();
+      setItems(data);
+    } catch {
+      setItems([]);
+    } finally {
+      setReady(true);
+    }
+  }, []);
+
   useEffect(() => {
-    setItems(read());
-    setReady(true);
-    const handler = () => setItems(read());
-    window.addEventListener("bayzz:replays-changed", handler);
-    window.addEventListener("storage", handler);
-    return () => {
-      window.removeEventListener("bayzz:replays-changed", handler);
-      window.removeEventListener("storage", handler);
-    };
-  }, []);
+    void refresh();
+  }, [refresh]);
 
-  const add = useCallback((r: Omit<Replay, "id">) => {
-    const next = [...read(), { ...r, id: crypto.randomUUID() }];
-    write(next);
-  }, []);
+  const add = useCallback(
+    async (r: Omit<Replay, "id">) => {
+      await addReplayFn({ data: r });
+      window.dispatchEvent(new Event("bayzz:replays-changed"));
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const update = useCallback((id: string, patch: Partial<Omit<Replay, "id">>) => {
-    const next = read().map((r) => (r.id === id ? { ...r, ...patch } : r));
-    write(next);
-  }, []);
+  const update = useCallback(
+    async (id: string, patch: Omit<Replay, "id">) => {
+      await updateReplayFn({ data: { id, ...patch } });
+      window.dispatchEvent(new Event("bayzz:replays-changed"));
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const remove = useCallback((id: string) => {
-    write(read().filter((r) => r.id !== id));
-  }, []);
+  const remove = useCallback(
+    async (id: string) => {
+      await removeReplayFn({ data: { id } });
+      window.dispatchEvent(new Event("bayzz:replays-changed"));
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const validateToken = useCallback((id: string, token: string) => {
-    const r = read().find((x) => x.id === id);
-    if (!r) return false;
-    return r.token.trim() === token.trim();
-  }, []);
+  return { items, ready, add, update, remove, refresh };
+}
 
-  return { items, ready, add, update, remove, validateToken };
+export async function validateAndUnlock(id: string, token: string) {
+  return unlockReplay({ data: { id, token } });
 }
 
 export function toEmbedUrl(url: string): string {
@@ -112,41 +132,43 @@ export function toVideoId(url: string): string {
     }
     return "";
   } catch {
-    // maybe a raw id
     return /^[a-zA-Z0-9_-]{6,}$/.test(url) ? url : "";
   }
 }
 
-// Simple admin auth (demo only — client side)
-const DEFAULT_ADMIN = { username: "admin", password: "bayzz123" };
-
-export function adminLogin(username: string, password: string): boolean {
-  if (username === DEFAULT_ADMIN.username && password === DEFAULT_ADMIN.password) {
-    localStorage.setItem(ADMIN_KEY, "1");
-    window.dispatchEvent(new Event("bayzz:auth-changed"));
-    return true;
-  }
-  return false;
+// Server-validated admin auth (session cookie, httpOnly)
+export async function adminLogin(username: string, password: string): Promise<boolean> {
+  const res = await adminLoginFn({ data: { username, password } });
+  if (res.ok) window.dispatchEvent(new Event("bayzz:auth-changed"));
+  return res.ok;
 }
 
-export function adminLogout() {
-  localStorage.removeItem(ADMIN_KEY);
+export async function adminLogout() {
+  await adminLogoutFn();
   window.dispatchEvent(new Event("bayzz:auth-changed"));
 }
 
 export function useAdminAuth() {
   const [authed, setAuthed] = useState(false);
   const [ready, setReady] = useState(false);
-  useEffect(() => {
-    setAuthed(localStorage.getItem(ADMIN_KEY) === "1");
-    setReady(true);
-    const h = () => setAuthed(localStorage.getItem(ADMIN_KEY) === "1");
-    window.addEventListener("bayzz:auth-changed", h);
-    window.addEventListener("storage", h);
-    return () => {
-      window.removeEventListener("bayzz:auth-changed", h);
-      window.removeEventListener("storage", h);
-    };
+
+  const check = useCallback(async () => {
+    try {
+      const s = await getAdminSession();
+      setAuthed(!!s.authed);
+    } catch {
+      setAuthed(false);
+    } finally {
+      setReady(true);
+    }
   }, []);
+
+  useEffect(() => {
+    void check();
+    const h = () => void check();
+    window.addEventListener("bayzz:auth-changed", h);
+    return () => window.removeEventListener("bayzz:auth-changed", h);
+  }, [check]);
+
   return { authed, ready };
 }

@@ -16,14 +16,7 @@ export type MembershipCode = {
   usedBy?: string; // opaque member id
 };
 
-const SEED_REPLAYS: Replay[] = [
-  {
-    id: "demo-1",
-    name: "Bayzz Opening Show",
-    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    token: "BAYZZ-001",
-  },
-];
+const SEED_REPLAYS: Replay[] = [];
 
 type Store = {
   replays: Replay[];

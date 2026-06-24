@@ -7,9 +7,16 @@ export type Replay = {
   token: string;
 };
 
-// Ephemeral server-side store (per worker isolate). Seeded with demo data.
-// For durable persistence, enable Lovable Cloud and back this with a DB table.
-const SEED: Replay[] = [
+export type MembershipCode = {
+  id: string;
+  code: string;
+  durationDays: number;
+  createdAt: number;
+  usedAt?: number;
+  usedBy?: string; // opaque member id
+};
+
+const SEED_REPLAYS: Replay[] = [
   {
     id: "demo-1",
     name: "Bayzz Opening Show",
@@ -18,18 +25,19 @@ const SEED: Replay[] = [
   },
 ];
 
-const g = globalThis as unknown as { __bayzzReplays?: Replay[] };
-if (!g.__bayzzReplays) g.__bayzzReplays = [...SEED];
+type Store = {
+  replays: Replay[];
+  codes: MembershipCode[];
+};
 
-export function getAllReplays(): Replay[] {
-  return g.__bayzzReplays!;
+const g = globalThis as unknown as { __bayzzStore?: Store };
+if (!g.__bayzzStore) g.__bayzzStore = { replays: [...SEED_REPLAYS], codes: [] };
+
+export function store(): Store {
+  return g.__bayzzStore!;
 }
 
-export function setAllReplays(items: Replay[]) {
-  g.__bayzzReplays = items;
-}
-
-export function sessionConfig() {
+export function adminSessionConfig() {
   const password = process.env.BAYZZ_SESSION_SECRET;
   if (!password) throw new Error("BAYZZ_SESSION_SECRET is not set");
   return {
@@ -45,10 +53,34 @@ export function sessionConfig() {
   };
 }
 
+export function memberSessionConfig() {
+  const password = process.env.BAYZZ_SESSION_SECRET;
+  if (!password) throw new Error("BAYZZ_SESSION_SECRET is not set");
+  return {
+    password,
+    name: "bayzz-member",
+    maxAge: 60 * 60 * 24 * 60, // cookie can live up to 60d; we enforce expiresAt
+    cookie: {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax" as const,
+      path: "/",
+    },
+  };
+}
+
+export type MemberSession = { memberId?: string; expiresAt?: number };
+
 export function safeEqual(a: string, b: string): boolean {
   const ha = createHash("sha256").update(a, "utf8").digest();
   const hb = createHash("sha256").update(b, "utf8").digest();
   return timingSafeEqual(ha, hb);
 }
 
-export type AdminSession = { authed?: boolean };
+export function genCode(): string {
+  // BAYZZ-XXXX-XXXX (alphanumeric, no ambiguous chars)
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const pick = () =>
+    Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+  return `BAYZZ-${pick()}-${pick()}`;
+}

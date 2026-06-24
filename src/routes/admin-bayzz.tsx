@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useReplays, useAdminAuth, adminLogin, adminLogout, type Replay } from "@/lib/replays-store";
+import { useAdminReplays, useAdminAuth, adminLogin, adminLogout, type Replay } from "@/lib/replays-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,9 +48,10 @@ function LoginForm() {
   const [u, setU] = useState("");
   const [p, setP] = useState("");
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminLogin(u, p)) {
+    const ok = await adminLogin(u, p);
+    if (ok) {
       toast.success("Login berhasil");
     } else {
       toast.error("Username atau password salah");
@@ -95,7 +96,7 @@ type FormState = { name: string; youtubeUrl: string; token: string };
 const EMPTY: FormState = { name: "", youtubeUrl: "", token: "" };
 
 function Dashboard() {
-  const { items, add, update, remove } = useReplays();
+  const { items, add, update, remove } = useAdminReplays();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Replay | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -111,26 +112,34 @@ function Dashboard() {
     setOpen(true);
   };
 
-  const save = (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.youtubeUrl.trim() || !form.token.trim()) {
       toast.error("Semua field wajib diisi");
       return;
     }
-    if (editing) {
-      update(editing.id, form);
-      toast.success("Replay diperbarui");
-    } else {
-      add(form);
-      toast.success("Replay ditambahkan");
+    try {
+      if (editing) {
+        await update(editing.id, form);
+        toast.success("Replay diperbarui");
+      } else {
+        await add(form);
+        toast.success("Replay ditambahkan");
+      }
+      setOpen(false);
+    } catch {
+      toast.error("Gagal menyimpan. Pastikan kamu masih login.");
     }
-    setOpen(false);
   };
 
-  const handleDelete = (r: Replay) => {
+  const handleDelete = async (r: Replay) => {
     if (confirm(`Hapus "${r.name}"?`)) {
-      remove(r.id);
-      toast.success("Replay dihapus");
+      try {
+        await remove(r.id);
+        toast.success("Replay dihapus");
+      } catch {
+        toast.error("Gagal menghapus.");
+      }
     }
   };
 
@@ -150,8 +159,8 @@ function Dashboard() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              adminLogout();
+              onClick={async () => {
+              await adminLogout();
               toast.success("Logged out");
             }}
             className="text-muted-foreground hover:text-foreground"

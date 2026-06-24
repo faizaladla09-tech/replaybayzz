@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useReplays, toVideoId, type Replay } from "@/lib/replays-store";
+import { usePublicReplays, validateAndUnlock, toVideoId, type PublicReplay } from "@/lib/replays-store";
 import { YouTubePlayer } from "@/components/YouTubePlayer";
 import { ReplayFeedback } from "@/components/ReplayFeedback";
 import { useRatings } from "@/lib/feedback-store";
@@ -26,8 +26,9 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const { items, ready, validateToken } = useReplays();
-  const [active, setActive] = useState<Replay | null>(null);
+  const { items, ready } = usePublicReplays();
+  const [active, setActive] = useState<PublicReplay | null>(null);
+  const [unlockedVideoId, setUnlockedVideoId] = useState<string>("");
   const [tokenInput, setTokenInput] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [query, setQuery] = useState("");
@@ -38,20 +39,27 @@ function Index() {
     return items.filter((r) => r.name.toLowerCase().includes(q));
   }, [items, query]);
 
-  const openReplay = (r: Replay) => {
+  const openReplay = (r: PublicReplay) => {
     setActive(r);
     setTokenInput("");
     setUnlocked(false);
+    setUnlockedVideoId("");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!active) return;
-    if (validateToken(active.id, tokenInput)) {
-      setUnlocked(true);
-      toast.success("Token valid! Memuat video...");
-    } else {
-      toast.error("Token tidak valid!");
+    try {
+      const res = await validateAndUnlock(active.id, tokenInput);
+      if (res.ok) {
+        setUnlockedVideoId(toVideoId(res.youtubeUrl));
+        setUnlocked(true);
+        toast.success("Token valid! Memuat video...");
+      } else {
+        toast.error("Token tidak valid!");
+      }
+    } catch {
+      toast.error("Terjadi kesalahan. Coba lagi.");
     }
   };
 
@@ -60,6 +68,7 @@ function Index() {
       setActive(null);
       setUnlocked(false);
       setTokenInput("");
+      setUnlockedVideoId("");
     }
   };
 
@@ -149,7 +158,7 @@ function Index() {
 
           {unlocked && active ? (
             <>
-              <YouTubePlayer videoId={toVideoId(active.youtubeUrl)} title={active.name} />
+              <YouTubePlayer videoId={unlockedVideoId} title={active.name} />
               <ReplayFeedback replayId={active.id} />
             </>
           ) : (
@@ -175,7 +184,7 @@ function Index() {
   );
 }
 
-function ReplayCard({ replay, onOpen }: { replay: Replay; onOpen: () => void }) {
+function ReplayCard({ replay, onOpen }: { replay: PublicReplay; onOpen: () => void }) {
   const { avg, count } = useRatings(replay.id);
   return (
     <article className="group rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/60 transition shadow-lg shadow-black/20">

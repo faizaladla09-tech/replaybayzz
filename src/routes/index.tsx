@@ -1,7 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { usePublicReplays, validateAndUnlock, toVideoId, type PublicReplay } from "@/lib/replays-store";
+import {
+  usePublicReplays,
+  validateAndUnlock,
+  unlockAsMember,
+  useMembership,
+  toVideoId,
+  type PublicReplay,
+} from "@/lib/replays-store";
+import { MembershipBar } from "@/components/MembershipBar";
 import { YouTubePlayer } from "@/components/YouTubePlayer";
 import { ReplayFeedback } from "@/components/ReplayFeedback";
 import { useRatings } from "@/lib/feedback-store";
@@ -27,6 +35,7 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const { items, ready } = usePublicReplays();
+  const { active: memberActive } = useMembership();
   const [active, setActive] = useState<PublicReplay | null>(null);
   const [unlockedVideoId, setUnlockedVideoId] = useState<string>("");
   const [tokenInput, setTokenInput] = useState("");
@@ -39,11 +48,22 @@ function Index() {
     return items.filter((r) => r.name.toLowerCase().includes(q));
   }, [items, query]);
 
-  const openReplay = (r: PublicReplay) => {
+  const openReplay = async (r: PublicReplay) => {
     setActive(r);
     setTokenInput("");
     setUnlocked(false);
     setUnlockedVideoId("");
+    if (memberActive) {
+      try {
+        const res = await unlockAsMember(r.id);
+        if (res.ok) {
+          setUnlockedVideoId(toVideoId(res.youtubeUrl));
+          setUnlocked(true);
+        }
+      } catch {
+        // fall back to token form
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -101,8 +121,12 @@ function Index() {
           Tonton ulang momen terbaik.
         </h1>
         <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-          Masukkan token akses untuk membuka replay favoritmu di Bayzz.
+          Aktifkan membership 30 hari untuk akses semua replay, atau buka per-replay dengan token.
         </p>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-4 sm:px-6 pb-8">
+        <MembershipBar />
       </section>
 
       <main className="mx-auto max-w-6xl px-4 sm:px-6 pb-20">
@@ -163,6 +187,9 @@ function Index() {
             </>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
+              {memberActive ? (
+                <p className="text-sm text-muted-foreground">Memuat replay…</p>
+              ) : null}
               <Input
                 autoFocus
                 value={tokenInput}

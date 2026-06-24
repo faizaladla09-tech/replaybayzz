@@ -2,13 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { useSession } from "@tanstack/react-start/server";
 import { z } from "zod";
 
-async function requireAdmin() {
-  const { sessionConfig } = await import("./bayzz.server");
-  const { AdminSession } = await import("./bayzz.server").then((m) => ({ AdminSession: null as unknown as m extends never ? never : never }));
-  const session = await useSession<{ authed?: boolean }>(sessionConfig());
-  if (!session.data.authed) throw new Error("Unauthorized");
-  return session;
-}
 
 export const getAdminSession = createServerFn({ method: "GET" }).handler(async () => {
   const { sessionConfig } = await import("./bayzz.server");

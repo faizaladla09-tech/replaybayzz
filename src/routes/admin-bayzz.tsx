@@ -1,6 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { useAdminReplays, useAdminAuth, adminLogin, adminLogout, type Replay } from "@/lib/replays-store";
+import { useEffect, useState } from "react";
+import { z } from "zod";
+import {
+  useAdminReplays,
+  useAdminAuth,
+  adminLogin,
+  adminLogout,
+  toVideoId,
+  type Replay,
+} from "@/lib/replays-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +29,26 @@ import {
 } from "@/components/ui/table";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, LogOut, ArrowLeft } from "lucide-react";
+import {
+  Pencil,
+  Trash2,
+  Plus,
+  LogOut,
+  ArrowLeft,
+  CheckCircle2,
+  AlertCircle,
+  X,
+} from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { AdminMembershipCodes } from "@/components/AdminMembershipCodes";
 
 export const Route = createFileRoute("/admin-bayzz")({
@@ -95,52 +122,127 @@ function LoginForm() {
 
 type FormState = { name: string; youtubeUrl: string; token: string };
 const EMPTY: FormState = { name: "", youtubeUrl: "", token: "" };
+type FieldErrors = Partial<Record<keyof FormState, string>>;
+type StatusMsg = { kind: "success" | "error"; text: string } | null;
+
+const replaySchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, "Nama minimal 2 karakter")
+    .max(120, "Nama maksimal 120 karakter"),
+  youtubeUrl: z
+    .string()
+    .trim()
+    .min(1, "Link YouTube wajib diisi")
+    .max(500, "Link terlalu panjang")
+    .refine((v) => toVideoId(v).length > 0, {
+      message: "Bukan link YouTube yang valid",
+    }),
+  token: z
+    .string()
+    .trim()
+    .min(4, "Token minimal 4 karakter")
+    .max(64, "Token maksimal 64 karakter")
+    .regex(/^[A-Za-z0-9_-]+$/, "Hanya huruf, angka, '-' atau '_'"),
+});
 
 function Dashboard() {
   const { items, add, update, remove } = useAdminReplays();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Replay | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [status, setStatus] = useState<StatusMsg>(null);
+  const [confirmDel, setConfirmDel] = useState<Replay | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Auto-hide inline status after 4s
+  useEffect(() => {
+    if (!status) return;
+    const t = setTimeout(() => setStatus(null), 4000);
+    return () => clearTimeout(t);
+  }, [status]);
 
   const openNew = () => {
     setEditing(null);
     setForm(EMPTY);
+    setErrors({});
     setOpen(true);
   };
   const openEdit = (r: Replay) => {
     setEditing(r);
     setForm({ name: r.name, youtubeUrl: r.youtubeUrl, token: r.token });
+    setErrors({});
     setOpen(true);
+  };
+
+  const validate = (data: FormState): FieldErrors => {
+    const res = replaySchema.safeParse(data);
+    if (res.success) return {};
+    const errs: FieldErrors = {};
+    for (const issue of res.error.issues) {
+      const k = issue.path[0] as keyof FormState | undefined;
+      if (k && !errs[k]) errs[k] = issue.message;
+    }
+    // Duplicate-name guard
+    const dupName = items.some(
+      (r) =>
+        r.name.trim().toLowerCase() === data.name.trim().toLowerCase() &&
+        r.id !== editing?.id,
+    );
+    if (!errs.name && dupName) errs.name = "Nama ini sudah dipakai replay lain";
+    return errs;
+  };
+
+  const onChange = (k: keyof FormState, v: string) => {
+    setForm((f) => ({ ...f, [k]: v }));
+    if (errors[k]) setErrors((prev) => ({ ...prev, [k]: undefined }));
   };
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.youtubeUrl.trim() || !form.token.trim()) {
-      toast.error("Semua field wajib diisi");
+    const errs = validate(form);
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
       return;
     }
+    setSubmitting(true);
     try {
       if (editing) {
         await update(editing.id, form);
+        setStatus({ kind: "success", text: `Replay "${form.name}" diperbarui` });
         toast.success("Replay diperbarui");
       } else {
         await add(form);
+        setStatus({ kind: "success", text: `Replay "${form.name}" ditambahkan` });
         toast.success("Replay ditambahkan");
       }
       setOpen(false);
-    } catch {
-      toast.error("Gagal menyimpan. Pastikan kamu masih login.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Gagal menyimpan replay";
+      setStatus({ kind: "error", text: msg });
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleDelete = async (r: Replay) => {
-    if (confirm(`Hapus "${r.name}"?`)) {
-      try {
-        await remove(r.id);
-        toast.success("Replay dihapus");
-      } catch {
-        toast.error("Gagal menghapus.");
-      }
+  const doDelete = async () => {
+    if (!confirmDel) return;
+    setDeleting(true);
+    try {
+      await remove(confirmDel.id);
+      setStatus({ kind: "success", text: `Replay "${confirmDel.name}" dihapus` });
+      toast.success("Replay dihapus");
+      setConfirmDel(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Gagal menghapus replay";
+      setStatus({ kind: "error", text: msg });
+      toast.error(msg);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -172,6 +274,33 @@ function Dashboard() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
+        {status && (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`mb-5 flex items-start gap-3 rounded-xl border p-3 text-sm ${
+              status.kind === "success"
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                : "border-destructive/40 bg-destructive/10 text-destructive"
+            }`}
+          >
+            {status.kind === "success" ? (
+              <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+            ) : (
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            )}
+            <p className="flex-1">{status.text}</p>
+            <button
+              type="button"
+              onClick={() => setStatus(null)}
+              className="opacity-70 hover:opacity-100"
+              aria-label="Tutup notifikasi"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-semibold">
             {items.length} replay tersimpan
@@ -217,7 +346,7 @@ function Dashboard() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => handleDelete(r)}
+                            onClick={() => setConfirmDel(r)}
                             className="text-destructive hover:text-destructive"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -242,44 +371,115 @@ function Dashboard() {
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Replay" : "Tambah Replay"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={save} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nama Replay</Label>
-              <Input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="bg-secondary border-border"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Link YouTube</Label>
-              <Input
-                value={form.youtubeUrl}
-                onChange={(e) => setForm({ ...form, youtubeUrl: e.target.value })}
-                placeholder="https://www.youtube.com/watch?v=..."
-                className="bg-secondary border-border"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Token Akses</Label>
-              <Input
-                value={form.token}
-                onChange={(e) => setForm({ ...form, token: e.target.value })}
-                placeholder="BAYZZ-XXX"
-                className="bg-secondary border-border"
-              />
-            </div>
+          <form onSubmit={save} className="space-y-4" noValidate>
+            <FieldRow
+              label="Nama Replay"
+              error={errors.name}
+              input={
+                <Input
+                  value={form.name}
+                  onChange={(e) => onChange("name", e.target.value)}
+                  maxLength={120}
+                  aria-invalid={!!errors.name}
+                  className={`bg-secondary border-border ${errors.name ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                />
+              }
+            />
+            <FieldRow
+              label="Link YouTube"
+              error={errors.youtubeUrl}
+              hint="Mendukung youtube.com/watch, youtu.be, shorts, embed."
+              input={
+                <Input
+                  value={form.youtubeUrl}
+                  onChange={(e) => onChange("youtubeUrl", e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  maxLength={500}
+                  aria-invalid={!!errors.youtubeUrl}
+                  className={`bg-secondary border-border ${errors.youtubeUrl ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                />
+              }
+            />
+            <FieldRow
+              label="Token Akses"
+              error={errors.token}
+              hint="4–64 karakter, hanya huruf/angka/'-'/'_'."
+              input={
+                <Input
+                  value={form.token}
+                  onChange={(e) => onChange("token", e.target.value)}
+                  placeholder="BAYZZ-XXX"
+                  maxLength={64}
+                  aria-invalid={!!errors.token}
+                  className={`bg-secondary border-border font-mono ${errors.token ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                />
+              }
+            />
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={submitting}>
                 Batal
               </Button>
-              <Button type="submit" className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold">
-                Simpan
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+              >
+                {submitting ? "Menyimpan..." : "Simpan"}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!confirmDel} onOpenChange={(o) => !o && setConfirmDel(null)}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus replay?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Replay <span className="font-semibold text-foreground">"{confirmDel?.name}"</span> akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void doDelete();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Menghapus..." : "Hapus"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
+  );
+}
+
+function FieldRow({
+  label,
+  input,
+  error,
+  hint,
+}: {
+  label: string;
+  input: React.ReactNode;
+  error?: string;
+  hint?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {input}
+      {error ? (
+        <p className="text-xs text-destructive flex items-center gap-1">
+          <AlertCircle className="h-3 w-3" /> {error}
+        </p>
+      ) : hint ? (
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      ) : null}
+    </div>
   );
 }

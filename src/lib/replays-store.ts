@@ -9,6 +9,9 @@ import {
   getAdminSession,
   adminLoginFn,
   adminLogoutFn,
+  getMembership,
+  redeemMembershipCode,
+  memberLogoutFn,
 } from "./bayzz.functions";
 
 export type Replay = {
@@ -95,6 +98,48 @@ export function useAdminReplays() {
 
 export async function validateAndUnlock(id: string, token: string) {
   return unlockReplay({ data: { id, token } });
+}
+
+export async function unlockAsMember(id: string) {
+  return unlockReplay({ data: { id } });
+}
+
+// Membership
+export function useMembership() {
+  const [expiresAt, setExpiresAt] = useState<number | null>(null);
+  const [ready, setReady] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const r = await getMembership();
+      setExpiresAt(r.active ? r.expiresAt : null);
+    } catch {
+      setExpiresAt(null);
+    } finally {
+      setReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const h = () => void refresh();
+    window.addEventListener("bayzz:member-changed", h);
+    return () => window.removeEventListener("bayzz:member-changed", h);
+  }, [refresh]);
+
+  const active = expiresAt !== null && expiresAt > Date.now();
+  return { active, expiresAt, ready, refresh };
+}
+
+export async function redeemCode(code: string) {
+  const r = await redeemMembershipCode({ data: { code } });
+  if (r.ok) window.dispatchEvent(new Event("bayzz:member-changed"));
+  return r;
+}
+
+export async function memberLogout() {
+  await memberLogoutFn();
+  window.dispatchEvent(new Event("bayzz:member-changed"));
 }
 
 export function toEmbedUrl(url: string): string {

@@ -22,6 +22,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { Pencil, Trash2, Plus, LogOut, ArrowLeft } from "lucide-react";
+import { AdminMembershipCodes } from "@/components/AdminMembershipCodes";
 
 export const Route = createFileRoute("/admin-bayzz")({
   head: () => ({
@@ -229,6 +230,10 @@ function Dashboard() {
               </TableBody>
             </Table>
           </div>
+        </div>
+
+        <div className="mt-8">
+          <AdminMembershipCodes />
         </div>
       </main>
 
